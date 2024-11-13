@@ -38,6 +38,7 @@ class camera {
         initialize();
 
         std::cout << "P3\n" << image_width << ' ' << image_height << "\n255\n";
+        std::flush(std::cout);
 
         int image_size_in_bytes = sizeof(color) * image_width * image_height;
         color *rendered_image = (color *) mmap(nullptr, image_size_in_bytes,
@@ -61,7 +62,9 @@ class camera {
             }
         }
 
-        for (int i = 0; i < remainder; i++) {
+        std::clog << processes * lines_per_child << " " << image_height << "\n";
+
+        for (int i = processes * lines_per_child; i < image_height; i++) {
             renderLine(i, world, rendered_image);
         }
         std::clog << "Remainder done.                 \n";
@@ -69,6 +72,8 @@ class camera {
         for (int i = 0; i < processes; i++) {
             wait(NULL);
         }
+
+
 
         for (int i = 0; i < image_height; i++) {
             for (int j = 0; j < image_width; j++) {
