@@ -13,7 +13,11 @@
 
 #include "hittable.h"
 #include "material.h"
-
+#include <sys/mman.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 class camera {
   public:
@@ -30,24 +34,60 @@ class camera {
     double defocus_angle = 0;  // Variation angle of rays through each pixel
     double focus_dist = 10;    // Distance from camera lookfrom point to plane of perfect focus
 
-    void render(const hittable& world) {
+    void render(const hittable& world, int processes) {
         initialize();
 
         std::cout << "P3\n" << image_width << ' ' << image_height << "\n255\n";
 
-        for (int j = 0; j < image_height; j++) {
-            std::clog << "\rScanlines remaining: " << (image_height - j) << ' ' << std::flush;
-            for (int i = 0; i < image_width; i++) {
-                color pixel_color(0,0,0);
-                for (int sample = 0; sample < samples_per_pixel; sample++) {
-                    ray r = get_ray(i, j);
-                    pixel_color += ray_color(r, max_depth, world);
+        int image_size_in_bytes = sizeof(color) * image_width * image_height;
+        color *rendered_image = (color *) mmap(nullptr, image_size_in_bytes,
+                                                 PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+
+        int lines_per_child = image_height / processes;
+        int remainder = image_height % processes;
+
+        std::clog << "Rendering " << image_height << " lines with " << processes << " processes.\n";
+        std::clog << lines_per_child << " lines per child, " << remainder << " remainder.\n";
+
+        pid_t pid;
+        for (int i = 0; i < processes; i++) {
+            pid = fork();
+            if (pid == 0) {
+                for (int j = i * lines_per_child; j < (i + 1) * lines_per_child; j++) {
+                    renderLine(j, world, rendered_image);
                 }
-                write_color(std::cout, pixel_samples_scale * pixel_color);
+                std::clog << "Child process " << i << " done.                 \n";
+                exit(0);
+            }
+        }
+
+        for (int i = 0; i < remainder; i++) {
+            renderLine(i, world, rendered_image);
+        }
+        std::clog << "Remainder done.                 \n";
+
+        for (int i = 0; i < processes; i++) {
+            wait(NULL);
+        }
+
+        for (int i = 0; i < image_height; i++) {
+            for (int j = 0; j < image_width; j++) {
+                write_color(std::cout, rendered_image[i * image_width + j]);
             }
         }
 
         std::clog << "\rDone.                 \n";
+    }
+
+    void renderLine(int line, const hittable &world, color *rendered_image) {
+        for (int i = 0; i < image_width; i++) {
+            color pixel_color(0,0,0);
+            for (int sample = 0; sample < samples_per_pixel; sample++) {
+                ray r = get_ray(i, line);
+                pixel_color += ray_color(r, max_depth, world);
+            }
+            rendered_image[line * image_width + i] = pixel_samples_scale * pixel_color;
+        }
     }
 
   private:

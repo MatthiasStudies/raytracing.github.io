@@ -16,9 +16,11 @@
 #include "hittable_list.h"
 #include "material.h"
 #include "sphere.h"
+#include <stdio.h>
+#include <sys/time.h>
 
 
-int main() {
+int main(int argc, char *argv[]) {
     hittable_list world;
 
     auto ground_material = make_shared<lambertian>(color(0.5, 0.5, 0.5));
@@ -76,5 +78,22 @@ int main() {
     cam.defocus_angle = 0.6;
     cam.focus_dist    = 10.0;
 
-    cam.render(world);
+    int n = 1;
+    if(argc > 1) {
+        n = atoi(argv[1]);
+    }
+
+    struct timeval start, end;
+    long seconds, useconds;
+    double duration;
+
+    gettimeofday(&start, NULL);
+    cam.render(world, n);
+    gettimeofday(&end, NULL);
+
+    seconds  = end.tv_sec  - start.tv_sec;
+    useconds = end.tv_usec - start.tv_usec;
+    duration = seconds + useconds/1000000.0;
+
+    std::clog << "Time taken: " << duration << " seconds" << std::endl;
 }
